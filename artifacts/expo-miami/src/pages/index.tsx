@@ -1,5 +1,3 @@
-import { useGetPublicSettings, useCreateLead } from "@workspace/api-client-react";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -14,6 +12,62 @@ const localImages = {
   hero: localAsset("miami-waterfront-hero.png"),
   city: localAsset("miami-biscayne-aerial.png"),
   team: localAsset("expo-miami-team.png"),
+};
+
+// Landing-only content. Keeping it in the compiled site removes the need for
+// an API and database while retaining a single place to update the copy later.
+type StaticSection = Record<string, string | undefined>;
+
+const staticSettings: Record<
+  "global" | "hero" | "metrics" | "scenes" | "about" | "team" | "sima",
+  StaticSection
+> = {
+  global: {
+    site_name: "Expo Miami Real Estate",
+    whatsapp_number: "17867881877",
+    og_title: "Expo Miami Real Estate — Inversión inmobiliaria de lujo desde España",
+    og_description: "Agencia licenciada en Florida especializada en inversores de alto patrimonio desde España.",
+    canonical_url: "https://www.miamiexporealestate.com/",
+    banner_strip_image: undefined, banner_strip_image_mobile: undefined,
+    og_image: undefined, gsc_verification: undefined, meta_pixel_id: undefined,
+    ga4_id: undefined, gtm_id: undefined,
+  },
+  hero: {
+    hero_title: "Invierte en Miami desde España.",
+    hero_subtitle: "Agencia licenciada en Florida especializada en inversores de alto patrimonio.",
+    hero_cta: "Conversemos por WhatsApp",
+    hero_image: undefined, hero_image_mobile: undefined,
+    hero_image_2: undefined, hero_image_2_mobile: undefined,
+    hero_image_3: undefined, hero_image_3_mobile: undefined,
+  },
+  metrics: {
+    metric_1_value: "+5", metric_1_label: "Años en Miami",
+    metric_2_value: "$1M", metric_2_label: "Inversión mínima",
+    metric_3_value: "10%", metric_3_label: "Rentabilidad bruta anual",
+    metric_4_value: "0%", metric_4_label: "Impuesto estatal Florida",
+  },
+  scenes: {
+    scene_1_title: "Brickell", scene_1_subtitle: "Zona financiera",
+    scene_1_image: undefined,
+    scene_2_title: "South Beach", scene_2_subtitle: "Playa & vida nocturna",
+    scene_2_image: undefined,
+    scene_3_title: "Edgewater & Wynwood", scene_3_subtitle: "Arte & gastronomía",
+    scene_3_image: undefined,
+    scene_4_title: "Coral Gables", scene_4_subtitle: "Residencial premium",
+    scene_4_image: undefined,
+  },
+  about: {
+    about_headline: "Una agencia con presencia real en Miami",
+    about_text: "Expo Miami Real Estate es una agencia licenciada en Florida con oficina en Miami. Ayudamos a inversores españoles a adquirir propiedades de alto rendimiento en las mejores zonas de Miami.",
+    about_image: undefined, agency_image: undefined,
+  },
+  team: {
+    team_1_name: "Miriam Daniel", team_1_role: "Directora",
+    team_2_name: "Sara Pineda", team_2_role: "Directora",
+    team_3_name: "Estella Beniflah", team_3_role: "Directora",
+    team_1_image: undefined, team_2_image: undefined, team_3_image: undefined,
+  },
+  sima: { sima_bg_image: undefined, sima_bg_image_mobile: undefined },
 };
 
 const leadSchema = z.object({
@@ -57,7 +111,7 @@ function FadeUp({ children, className = "" }: { children: React.ReactNode; class
 }
 
 export default function Landing() {
-  const { data: settings, isLoading } = useGetPublicSettings();
+  const settings = staticSettings;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
 
@@ -238,14 +292,6 @@ export default function Landing() {
       setHeroIndex((i) => (i >= heroImagePairs.length ? 0 : i));
     }
   }, [heroImagePairs.length]);
-
-  if (isLoading) {
-    return <div className="min-h-screen bg-obsidian flex items-center justify-center">
-      <Skeleton className="h-12 w-32" />
-    </div>;
-  }
-
-  if (!settings) return null;
 
   const global = settings.global || {};
   const hero = settings.hero || {};
@@ -764,8 +810,8 @@ function TeamCard({ name, role, image, position = "center" }: { name: string; ro
 
 function LeadForm() {
   const [submitted, setSubmitted] = useState(false);
-  const [submittedEmail, setSubmittedEmail] = useState("");
-  const createLead = useCreateLead();
+  const [submitError, setSubmitError] = useState("");
+  const contactEndpoint = import.meta.env.VITE_CONTACT_FORM_ENDPOINT?.trim();
 
   const form = useForm<z.infer<typeof leadSchema>>({
     resolver: zodResolver(leadSchema),
@@ -778,13 +824,28 @@ function LeadForm() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof leadSchema>) {
-    createLead.mutate({ data: values }, {
-      onSuccess: () => {
-        setSubmittedEmail(values.email);
-        setSubmitted(true);
-      },
-    });
+  async function onSubmit(values: z.infer<typeof leadSchema>) {
+    if (!contactEndpoint) {
+      setSubmitError("El formulario está listo, pero aún estamos configurando el correo de contacto.");
+      return;
+    }
+
+    setSubmitError("");
+    try {
+      const response = await fetch(contactEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          ...values,
+          subject: "Nueva consulta desde Expo Miami Real Estate",
+        }),
+      });
+
+      if (!response.ok) throw new Error("Contact form request failed");
+      setSubmitted(true);
+    } catch {
+      setSubmitError("No pudimos enviar tu solicitud. Inténtalo de nuevo en unos minutos.");
+    }
   }
 
   if (submitted) {
@@ -797,20 +858,6 @@ function LeadForm() {
         <p className="font-body text-ds-slate-300 text-lg font-light mb-6">
           Hemos recibido tu solicitud. Un asesor senior se pondrá en contacto contigo a la brevedad.
         </p>
-        <div className="max-w-md mx-auto space-y-3 text-left border border-gold/20 rounded-sm px-5 py-4 bg-white/5">
-          <p className="font-body text-sm text-ds-slate-400 font-light">
-            Hemos enviado un correo de confirmación a{" "}
-            <span className="text-gold font-normal">{submittedEmail}</span>.
-          </p>
-          <p className="font-body text-sm text-ds-slate-400 font-light">
-            Si no lo encuentras en tu bandeja de entrada, revisa también la carpeta de <span className="text-ds-slate-300">correo no deseado</span> o <span className="text-ds-slate-300">spam</span>.
-          </p>
-          <p className="font-body text-sm text-ds-slate-400 font-light">
-            Para asegurarte de recibir todas nuestras comunicaciones, añade{" "}
-            <span className="text-gold font-normal">contacto@expomiamirealestate.com</span>{" "}
-            a tu lista de contactos.
-          </p>
-        </div>
       </div>
     );
   }
@@ -907,8 +954,14 @@ function LeadForm() {
           )}
         />
 
-        <button type="submit" className="btn-ds-primary w-full flex items-center justify-center gap-2" disabled={createLead.isPending}>
-          {createLead.isPending ? "Enviando..." : "Solicitar una conversación"}
+        {submitError && (
+          <p role="alert" className="font-body text-sm text-amber-200 border border-amber-200/20 bg-amber-200/5 px-4 py-3 rounded-lg">
+            {submitError}
+          </p>
+        )}
+
+        <button type="submit" className="btn-ds-primary w-full flex items-center justify-center gap-2">
+          Solicitar una conversación
         </button>
 
         <p className="font-body text-xs text-ds-slate-500 text-center font-light mt-4">
